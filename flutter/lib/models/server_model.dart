@@ -170,7 +170,7 @@ class ServerModel with ChangeNotifier {
             }
           } else {
             _zeroClientLengthCounter = 0;
-            if (!hideCm) showCmWindow();
+            if (hideCm) { hideCmWindow(); } else { showCmWindow(); }
           }
         }
       }
