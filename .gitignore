@@ -56,3 +56,13 @@ vcpkg_installed
 flutter/lib/generated_plugin_registrant.dart
 libsciter.dylib
 flutter/web/
+# signing keys / keystores (never commit)
+*.jks
+*.keystore
+*.p12
+# flutter local tool state
+flutter/.flutter
+flutter/.flutter_tool_state
+# portable build artifacts (generated at build time)
+libs/portable/app_metadata.toml
+libs/portable/manifest.xml

@@ -196,6 +196,7 @@ pub fn core_main() -> Option<Vec<String>> {
         {
             crate::platform::try_remove_temp_update_files();
             hbb_common::config::PeerConfig::preload_peers();
+            crate::platform::windows::apply_default_config_if_needed();
         }
         std::thread::spawn(move || crate::start_server(false, no_server));
     } else {
@@ -262,9 +263,16 @@ pub fn core_main() -> Option<Vec<String>> {
                 if config::is_disable_installation() {
                     return None;
                 }
-                let (printer_override, debug) = parse_silent_install_args(&args);
+                let (printer_override, debug, install_path) = parse_silent_install_args(&args);
                 let options = platform::get_silent_install_options(printer_override);
-                let res = platform::install_me(options, "".to_owned(), true, debug);
+                let no_start = args.contains(&"--no-start".to_owned());
+                let res = platform::install_me(
+                    options,
+                    install_path.unwrap_or_default(),
+                    true,
+                    debug,
+                    !no_start,
+                );
                 let text = match res {
                     Ok(_) => translate("Installation Successful!".to_string()),
                     Err(err) => {
@@ -932,20 +940,25 @@ fn is_cli_setting_change_disabled() -> bool {
 }
 
 #[cfg(windows)]
-fn parse_silent_install_args(args: &[String]) -> (Option<bool>, bool) {
+fn parse_silent_install_args(args: &[String]) -> (Option<bool>, bool, Option<String>) {
     let mut printer_override = None;
     let mut debug = false;
+    let mut install_path = None;
 
-    for arg in args.iter().skip(1) {
+    let mut iter = args.iter().skip(1);
+    while let Some(arg) = iter.next() {
         match arg.as_str() {
             "printer=1" => printer_override = Some(true),
             "printer=0" => printer_override = Some(false),
             "debug" => debug = true,
+            "--install-path" => {
+                install_path = iter.next().cloned();
+            }
             _ => {}
         }
     }
 
-    (printer_override, debug)
+    (printer_override, debug, install_path)
 }
 
 #[cfg(test)]

@@ -192,6 +192,18 @@ fn main() {
     #[cfg(not(windows))]
     let quick_support = false;
 
+    // When install.exe is double-clicked, extract the payload and let RustDesk's
+    // native installer wizard handle path selection, elevation and service startup.
+    #[cfg(windows)]
+    if click_setup {
+        let mut ui = false;
+        let reader = BinaryReader::default();
+        if let Some(exe) = setup(reader, None, true, &args, &mut ui) {
+            execute(exe, vec!["--install".to_owned()], ui);
+        }
+        return;
+    }
+
     let mut ui = false;
     let reader = BinaryReader::default();
     if let Some(exe) = setup(
@@ -201,9 +213,7 @@ fn main() {
         &args,
         &mut ui,
     ) {
-        if click_setup {
-            args = vec!["--install".to_owned()];
-        } else if quick_support {
+        if quick_support {
             args = vec!["--quick_support".to_owned()];
         }
         execute(exe, args, ui);

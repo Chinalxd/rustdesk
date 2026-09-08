@@ -78,6 +78,14 @@ impl CliprdrServiceContext for PasteboardContext {
         Ok(())
     }
 
+    fn is_stopped(&self) -> bool {
+        false
+    }
+
+    fn reset(&mut self) -> Result<(), CliprdrError> {
+        Ok(())
+    }
+
     fn empty_clipboard(&mut self, conn_id: i32) -> Result<bool, CliprdrError> {
         Ok(self.empty_clipboard_(conn_id))
     }

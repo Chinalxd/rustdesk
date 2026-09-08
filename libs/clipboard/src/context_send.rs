@@ -55,10 +55,25 @@ impl ContextSend {
     }
 
     /// make sure the clipboard context is enabled.
+    ///
+    /// If the context exists but was stopped (e.g. by a permission change or an
+    /// internal error path), try to reset it. If resetting fails, or if there is
+    /// no context at all, create a fresh one. This prevents file copy-paste from
+    /// silently dying after long-running sessions.
     pub fn make_sure_enabled() -> ResultType<()> {
         let mut lock = CONTEXT_SEND.lock().unwrap();
-        if lock.is_some() {
-            return Ok(());
+        if let Some(ctx) = lock.as_mut() {
+            if ctx.is_stopped() {
+                log::info!("clipboard context is stopped, resetting");
+                if let Err(e) = ctx.reset() {
+                    log::warn!("failed to reset clipboard context: {}, recreating", e);
+                    *lock = None;
+                } else {
+                    return Ok(());
+                }
+            } else {
+                return Ok(());
+            }
         }
 
         let ctx = crate::create_cliprdr_context(true, false, CLIPBOARD_RESPONSE_WAIT_TIMEOUT_SECS)?;

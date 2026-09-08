@@ -212,6 +212,9 @@ class PlatformFFI {
       await _ffiBind.mainDeviceId(id: id);
       await _ffiBind.mainDeviceName(name: name);
       await _ffiBind.mainSetHomeDir(home: _homeDir);
+      if (isAndroid || isIOS) {
+        await _applyDefaultConfigIfNeeded(_ffiBind);
+      }
       await _ffiBind.mainInit(
         appDir: _dir,
         customClientConfig: '',
@@ -220,6 +223,22 @@ class PlatformFFI {
       debugPrintStack(label: 'initialize failed: $e');
     }
     version = await getVersion();
+  }
+
+  /// Apply bundled default config on mobile if the user has not configured a custom server yet.
+  Future<void> _applyDefaultConfigIfNeeded(RustdeskImpl ffi) async {
+    try {
+      final current = await ffi.mainGetOptions();
+      final map = jsonDecode(current) as Map<String, dynamic>;
+      if ((map['custom-rendezvous-server'] ?? '').toString().isNotEmpty) {
+        return;
+      }
+      final cfg = await rootBundle.loadString('assets/config.json');
+      final defaults = jsonDecode(cfg) as Map<String, dynamic>;
+      await ffi.mainSetOptions(json: jsonEncode(defaults));
+    } catch (e) {
+      debugPrint('applyDefaultConfig failed: $e');
+    }
   }
 
   Future<bool> tryHandle(Map<String, dynamic> evt) async {

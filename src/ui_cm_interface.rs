@@ -550,6 +550,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     #[cfg(target_os = "windows")]
                                     {
                                         self.file_transfer_enabled = _file_transfer_enabled;
+                                        if _file_transfer_enabled {
+                                            if let Err(e) = ContextSend::make_sure_enabled() {
+                                                log::error!("Failed to make sure clipboard context enabled on login: {}", e);
+                                            }
+                                        }
                                     }
                                     self.running = true;
                                     break;
@@ -619,7 +624,7 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     let is_stopping_allowed = _clip.is_beginning_message();
                                     let is_clipboard_enabled = ContextSend::is_enabled();
                                     let file_transfer_enabled = self.file_transfer_enabled;
-                                    let stop = !is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled);
+                                    let stop = is_stopping_allowed && !(is_clipboard_enabled && file_transfer_enabled);
                                     log::debug!(
                                         "Process clipboard message from client peer, stop: {}, is_stopping_allowed: {}, is_clipboard_enabled: {}, file_transfer_enabled: {}",
                                         stop, is_stopping_allowed, is_clipboard_enabled, file_transfer_enabled);
@@ -629,6 +634,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                         if !is_authorized {
                                             log::debug!("Clipboard message from client peer, but not authorized");
                                             continue;
+                                        }
+                                        // Auto-recover the clipboard context if it has been
+                                        // stopped or lost after a long-running session.
+                                        if let Err(e) = ContextSend::make_sure_enabled() {
+                                            log::error!("failed to ensure clipboard context enabled: {}", e);
                                         }
                                         let conn_id = self.conn_id;
                                         let _ = ContextSend::proc(|context| -> ResultType<()> {
@@ -641,6 +651,11 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
                                     #[cfg(target_os = "windows")]
                                     {
                                         self.file_transfer_enabled_peer = _enabled;
+                                        if _enabled && self.file_transfer_enabled {
+                                            if let Err(e) = ContextSend::make_sure_enabled() {
+                                                log::error!("failed to ensure clipboard context on enable: {}", e);
+                                            }
+                                        }
                                     }
                                 }
                                 Data::Theme(dark) => {

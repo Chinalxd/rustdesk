@@ -309,6 +309,12 @@ void runConnectionManagerScreen() async {
 bool _isCmReadyToShow = false;
 
 showCmWindow({bool isStartup = false}) async {
+  // Always honor the hide-CM setting. Any code path that tries to show the
+  // connection manager while the user wants it hidden must bail out.
+  if (gFFI.serverModel.hideCm) {
+    await hideCmWindow();
+    return;
+  }
   if (isStartup) {
     WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
         size: kConnectionManagerWindowSizeClosedChat, alwaysOnTop: true);
@@ -346,11 +352,16 @@ hideCmWindow({bool isStartup = false}) async {
     await windowManager.hide();
     _isCmReadyToShow = true;
   } else if (_isCmReadyToShow) {
-    if (await windowManager.getOpacity() != 0) {
+    // Aggressively hide the window. Long-running processes can lose window
+    // state after display events (sleep/wake, DPI changes, etc.), so we force
+    // opacity to 0, minimize, and hide regardless of the cached opacity value.
+    try {
       await windowManager.setOpacity(0);
       bind.mainHideDock();
       await windowManager.minimize();
       await windowManager.hide();
+    } catch (e) {
+      debugPrint("hideCmWindow error: $e");
     }
   }
 }

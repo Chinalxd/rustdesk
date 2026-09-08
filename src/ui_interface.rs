@@ -102,13 +102,52 @@ pub fn goto_install() {
     std::process::exit(0);
 }
 
+#[cfg(windows)]
+fn show_install_error(msg: &str) {
+    use winapi::um::winuser::{MessageBoxW, MB_ICONERROR, MB_OK};
+    let text = format!(
+        "{} 安装失败：\n{}\n\n安装脚本与失败标记已保留在 %TEMP%\\rustdesk_install.bat(.undone)。",
+        crate::get_app_name(),
+        msg
+    );
+    let caption = format!("{} 安装", crate::get_app_name());
+    let text_utf16: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    let caption_utf16: Vec<u16> = caption.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text_utf16.as_ptr(),
+            caption_utf16.as_ptr(),
+            MB_OK | MB_ICONERROR,
+        );
+    }
+}
+
 #[inline]
-pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) {
+pub fn install_me(
+    _options: String,
+    _path: String,
+    _silent: bool,
+    _debug: bool,
+    _start_after: bool,
+) {
     #[cfg(windows)]
     std::thread::spawn(move || {
-        allow_err!(crate::platform::windows::install_me(
-            &_options, _path, _silent, _debug
-        ));
+        let res = crate::platform::windows::install_me(
+            &_options, _path, _silent, _debug, _start_after,
+        );
+        match res {
+            Ok(_) => {
+                log::info!("install_me succeeded");
+            }
+            Err(err) => {
+                log::error!("install_me failed: {}", err);
+                show_install_error(&format!("{}", err));
+                std::process::exit(1);
+            }
+        }
+        // The spawned processes above (main window / tray) keep running after this
+        // installer process exits, so it is safe to terminate the wizard here.
         std::process::exit(0);
     });
 }

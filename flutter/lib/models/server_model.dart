@@ -38,6 +38,7 @@ class ServerModel with ChangeNotifier {
   bool _allowNumericOneTimePassword = false;
   String _approveMode = "";
   int _zeroClientLengthCounter = 0;
+  int _forceHideCounter = 0;
 
   late String _emptyIdShow;
   late final IDTextEditingController _serverId;
@@ -170,7 +171,16 @@ class ServerModel with ChangeNotifier {
             }
           } else {
             _zeroClientLengthCounter = 0;
-            if (hideCm) { hideCmWindow(); } else { showCmWindow(); }
+            if (hideCm) {
+              hideCmWindow();
+              // Re-force hide every ~30 seconds in case Windows loses window state.
+              if (_forceHideCounter++ >= 60) {
+                _forceHideCounter = 0;
+                hideCmWindow();
+              }
+            } else {
+              showCmWindow();
+            }
           }
         }
       }

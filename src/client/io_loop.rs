@@ -380,6 +380,10 @@ impl<T: InvokeUiSession> Remote<T> {
             // Linux client cleanup runs synchronously in try_stop_clipboard() before FUSE is
             // unmounted. Keep this async path for other file-clipboard platforms.
             crate::clipboard::try_empty_clipboard_files(ClipboardSide::Client, self.client_conn_id);
+            // If this session was the clipboard owner or a pending relay
+            // requester, clear the markers so stale state is not used.
+            #[cfg(all(feature = "flutter", target_os = "windows"))]
+            clipboard::reset_relay_state_on_disconnect(self.client_conn_id);
         }
     }
 
@@ -2349,14 +2353,6 @@ impl<T: InvokeUiSession> Remote<T> {
         _peer: &mut Stream,
     ) {
         log::debug!("handling cliprdr msg from server peer");
-        #[cfg(feature = "flutter")]
-        if let Some(hbb_common::message_proto::cliprdr::Union::FormatList(_)) = &clip.union {
-            if self.client_conn_id
-                != clipboard::get_client_conn_id(&crate::flutter::get_cur_peer_id()).unwrap_or(0)
-            {
-                return;
-            }
-        }
 
         let Some(clip) = crate::clipboard_file::msg_2_clip(clip) else {
             log::warn!("failed to decode cliprdr msg from server peer");
@@ -2370,6 +2366,12 @@ impl<T: InvokeUiSession> Remote<T> {
                 "Process clipboard message from server peer, stop: {}, is_stopping_allowed: {}, file_transfer_enabled: {}",
                 stop, is_stopping_allowed, file_transfer_enabled);
         if !stop {
+            // Relay file-clipboard messages between sessions (control side) so
+            // that files copied on one remote host can be pasted on another.
+            #[cfg(all(feature = "flutter", target_os = "windows"))]
+            if relay_cliprdr_msg(self.client_conn_id, &clip) {
+                return;
+            }
             #[cfg(any(
                 target_os = "windows",
                 all(target_os = "macos", feature = "unix-file-copy-paste")
@@ -2379,11 +2381,20 @@ impl<T: InvokeUiSession> Remote<T> {
             };
             #[cfg(target_os = "windows")]
             {
+                // Clone at this point so we can forward FormatList after the
+                // C context has broadcast TryEmpty (other sessions must see
+                // TryEmpty before the new FormatList).
                 let _ = ContextSend::proc(|context| -> ResultType<()> {
                     context
-                        .server_clip_file(self.client_conn_id, clip)
+                        .server_clip_file(self.client_conn_id, clip.clone())
                         .map_err(|e| e.into())
                 });
+                // Forward the FormatList to all OTHER sessions so they can
+                // paste the file content (delayed rendering) from this owner.
+                #[cfg(all(feature = "flutter", target_os = "windows"))]
+                if let clipboard::ClipboardFile::FormatList { .. } = &clip {
+                    clipboard::send_data_exclude(self.client_conn_id, clip.clone());
+                }
             }
             #[cfg(feature = "unix-file-copy-paste")]
             if crate::is_support_file_copy_paste_num(self.handler.lc.read().unwrap().version) {
@@ -2491,6 +2502,87 @@ impl<T: InvokeUiSession> Remote<T> {
         let mut msg = Message::new();
         msg.set_misc(misc);
         self.sender.send(Data::Message(msg)).ok();
+    }
+}
+
+/// Relay file-clipboard messages between remote sessions on the control side.
+///
+/// With this relay, a user can copy files on remote host A and paste them on
+/// remote host B while both are connected to the same control client.
+///
+/// Returns `true` if the message was fully handled by the relay and must NOT
+/// enter the local clipboard context.
+///
+/// How it works:
+/// - A `FormatList` from any session is recorded as the clipboard owner and
+///   forwarded to all other sessions (delayed rendering, no data flows yet).
+///   It also falls through so the local clipboard still receives the files,
+///   preserving the original "paste on the local machine" behavior.
+/// - A `FormatDataRequest`/`FileContentsRequest` is a paste action. If the
+///   clipboard content is owned by another session, the request is relayed to
+///   that owner session instead of the local clipboard, and the requester is
+///   remembered.
+/// - A `FormatDataResponse`/`FileContentsResponse` that answers a relayed
+///   request is forwarded back to the requester.
+#[cfg(all(feature = "flutter", target_os = "windows"))]
+fn relay_cliprdr_msg(conn_id: i32, clip: &clipboard::ClipboardFile) -> bool {
+    use clipboard::ClipboardFile::*;
+    match clip {
+        FormatList { .. } => {
+            // This session now provides the clipboard content. The actual
+            // forwarding to other sessions happens after the local clipboard
+            // context is updated (see handle_cliprdr_msg), because that update
+            // broadcasts a TryEmpty that must reach the other sessions first.
+            clipboard::set_clipboard_owner(conn_id);
+            // Fall through: also inject into the local clipboard.
+            false
+        }
+        FormatDataRequest { .. } | FileContentsRequest { .. } => {
+            let owner = clipboard::get_clipboard_owner();
+            if owner != 0 && owner != conn_id {
+                // The clipboard content belongs to another session; relay the
+                // paste request to it and remember who asked.
+                log::debug!(
+                    "relay paste request from conn {} to owner conn {}",
+                    conn_id,
+                    owner
+                );
+                clipboard::set_pending_requester(conn_id);
+                allow_err!(clipboard::send_data(owner, clip.clone()));
+                true
+            } else {
+                false
+            }
+        }
+        FormatDataResponse { .. } | FileContentsResponse { .. } => {
+            let requester = clipboard::get_pending_requester();
+            if requester != 0 && requester != conn_id {
+                // This response answers a relayed request; forward it back.
+                // The pending marker is left in place so pipelined responses
+                // (multiple file-chunk responses) are still relayed; it is
+                // overwritten by the next request or cleared on TryEmpty /
+                // disconnect.
+                log::debug!(
+                    "relay paste response from conn {} to requester conn {}",
+                    conn_id,
+                    requester
+                );
+                allow_err!(clipboard::send_data(requester, clip.clone()));
+                true
+            } else {
+                false
+            }
+        }
+        TryEmpty => {
+            if clipboard::get_clipboard_owner() == conn_id {
+                clipboard::set_clipboard_owner(0);
+            }
+            if clipboard::get_pending_requester() == conn_id {
+                clipboard::set_pending_requester(0);
+            }
+            false
+        }
+        _ => false,
     }
 }
 

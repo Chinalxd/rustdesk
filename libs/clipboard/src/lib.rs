@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicI32, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex, RwLock};
 
 #[cfg(any(
@@ -58,6 +59,13 @@ pub struct ProgressPercent {
 pub trait CliprdrServiceContext: Send + Sync {
     /// set to be stopped
     fn set_is_stopped(&mut self) -> Result<(), CliprdrError>;
+    /// Returns true if the context has been stopped and can no longer serve
+    /// clipboard requests. A stopped context must be reset or recreated.
+    fn is_stopped(&self) -> bool;
+    /// Clear the stopped flag so the context can be reused. This is useful
+    /// when the context is otherwise healthy but was temporarily stopped by
+    /// a permission change or error path.
+    fn reset(&mut self) -> Result<(), CliprdrError>;
     /// clear the content on clipboard
     fn empty_clipboard(&mut self, conn_id: i32) -> Result<bool, CliprdrError>;
     /// run as a server for clipboard RPC
@@ -148,6 +156,72 @@ struct MsgChannel {
 lazy_static::lazy_static! {
     static ref VEC_MSG_CHANNEL: RwLock<Vec<MsgChannel>> = Default::default();
     static ref CLIENT_CONN_ID_COUNTER: Mutex<i32> = Mutex::new(0);
+}
+
+// Cross-session clipboard relay state (control side).
+// `CLIPBOARD_OWNER` records which session provided the current file clipboard
+// content: 0 means the local machine, otherwise the conn_id of the remote
+// session that injected the latest FormatList.
+static CLIPBOARD_OWNER: AtomicI32 = AtomicI32::new(0);
+// `PENDING_REQUESTER` records the conn_id of a session that is pasting files
+// whose content lives on another session (a relayed request is in flight).
+static PENDING_REQUESTER: AtomicI32 = AtomicI32::new(0);
+// `INJECTING_REMOTE_CLIPBOARD_OWNER` is temporarily set to the conn_id of a
+// remote session while that session's FormatList is being injected into the
+// local Windows clipboard. The local clipboard monitor callback is asynchronous
+// and would otherwise reset CLIPBOARD_OWNER to 0, breaking cross-session
+// paste relay (A->B). The callback uses this value to restore the owner.
+static INJECTING_REMOTE_CLIPBOARD_OWNER: AtomicI32 = AtomicI32::new(0);
+
+#[inline]
+pub fn get_clipboard_owner() -> i32 {
+    CLIPBOARD_OWNER.load(AtomicOrdering::SeqCst)
+}
+
+#[inline]
+pub fn set_clipboard_owner(conn_id: i32) {
+    CLIPBOARD_OWNER.store(conn_id, AtomicOrdering::SeqCst);
+}
+
+#[inline]
+pub fn get_pending_requester() -> i32 {
+    PENDING_REQUESTER.load(AtomicOrdering::SeqCst)
+}
+
+#[inline]
+pub fn set_pending_requester(conn_id: i32) {
+    PENDING_REQUESTER.store(conn_id, AtomicOrdering::SeqCst);
+}
+
+#[inline]
+pub fn set_injecting_remote_clipboard_owner(conn_id: i32) {
+    INJECTING_REMOTE_CLIPBOARD_OWNER.store(conn_id, AtomicOrdering::SeqCst);
+}
+
+#[inline]
+pub fn take_injecting_remote_clipboard_owner() -> i32 {
+    INJECTING_REMOTE_CLIPBOARD_OWNER.swap(0, AtomicOrdering::SeqCst)
+}
+
+/// Reset relay state when a session disconnects. If the disconnected session
+/// was the clipboard owner or the pending requester, clear the markers so
+/// stale requests are not relayed to a dead channel.
+pub fn reset_relay_state_on_disconnect(conn_id: i32) {
+    if conn_id == 0 {
+        return;
+    }
+    let _ = CLIPBOARD_OWNER.compare_exchange(
+        conn_id,
+        0,
+        AtomicOrdering::SeqCst,
+        AtomicOrdering::SeqCst,
+    );
+    let _ = PENDING_REQUESTER.compare_exchange(
+        conn_id,
+        0,
+        AtomicOrdering::SeqCst,
+        AtomicOrdering::SeqCst,
+    );
 }
 
 impl ClipboardFile {

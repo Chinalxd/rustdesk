@@ -351,7 +351,7 @@ class ChatModel with ChangeNotifier {
       return;
     }
     if (text.isEmpty) return;
-    if (desktopType == DesktopType.cm) {
+    if (desktopType == DesktopType.cm && !gFFI.serverModel.hideCm) {
       await showCmWindow();
     }
     String? peerId;

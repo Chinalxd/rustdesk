@@ -601,6 +601,15 @@ impl CliprdrServiceContext for CliprdrClientContext {
         Ok(())
     }
 
+    fn is_stopped(&self) -> bool {
+        self.IsStopped != FALSE
+    }
+
+    fn reset(&mut self) -> Result<(), CliprdrError> {
+        self.IsStopped = FALSE;
+        Ok(())
+    }
+
     fn empty_clipboard(&mut self, conn_id: i32) -> Result<bool, CliprdrError> {
         Ok(empty_clipboard(self, conn_id))
     }
@@ -657,6 +666,10 @@ pub fn server_clip_file(
                 conn_id,
                 &format_list
             );
+            // Tell the asynchronous local clipboard monitor callback which
+            // remote session owns the content we are about to inject, so it
+            // can keep CLIPBOARD_OWNER set correctly for cross-session relay.
+            crate::set_injecting_remote_clipboard_owner(conn_id);
             send_data_exclude(conn_id as _, ClipboardFile::TryEmpty);
             ret = server_format_list(context, conn_id, format_list);
             log::debug!(
@@ -1122,6 +1135,22 @@ extern "C" fn client_format_list(
     let data = ClipboardFile::FormatList { format_list };
     // no need to handle result here
     if conn_id == 0 {
+        // The local Windows clipboard changed. If this change was caused by
+        // injecting a remote session's FormatList, preserve that session as
+        // the clipboard owner so cross-session paste relay (A->B) works.
+        // Otherwise, the control host owns the content.
+        let remote_owner = crate::take_injecting_remote_clipboard_owner();
+        if remote_owner != 0 {
+            log::debug!(
+                "local clipboard changed due to remote injection from conn {}, keep owner {}",
+                remote_owner,
+                remote_owner
+            );
+            crate::set_clipboard_owner(remote_owner);
+        } else {
+            log::debug!("local machine copied files, local clipboard owns content");
+            crate::set_clipboard_owner(0);
+        }
         // msg_channel is used for debug, VEC_MSG_CHANNEL cannot be inspected by the debugger.
         let msg_channel = VEC_MSG_CHANNEL.read().unwrap();
         msg_channel

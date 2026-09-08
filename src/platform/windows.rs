@@ -9,7 +9,7 @@ use hbb_common::{
     allow_err,
     anyhow::anyhow,
     bail,
-    config::{self, Config},
+    config::{self, Config, Config2},
     libc::{c_int, wchar_t},
     log,
     message_proto::{DisplayInfo, Resolution, WindowsSession},
@@ -20,16 +20,15 @@ use hbb_common::{
 use std::{
     collections::HashMap,
     ffi::{CString, OsString},
-    fs,
+    fs::{self, OpenOptions},
     io::{self, prelude::*},
     mem,
-    os::{
-        raw::c_ulong,
-        windows::{ffi::OsStringExt, process::CommandExt},
-    },
+    os::raw::c_ulong,
+    os::windows::{ffi::OsStringExt, process::CommandExt},
+    process::Stdio,
+    sync::{atomic::Ordering, Arc, Mutex},
     path::*,
     ptr::null_mut,
-    sync::{atomic::Ordering, Arc, Mutex},
     time::{Duration, Instant},
 };
 use wallpaper;
@@ -1552,8 +1551,24 @@ fn get_after_install(
     ", create_service=get_create_service(&exe))
 }
 
-pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
-    let uninstall_str = get_uninstall(false, false);
+pub fn install_me(
+    options: &str,
+    path: String,
+    silent: bool,
+    debug: bool,
+    start_after: bool,
+) -> ResultType<()> {
+    log::info!(
+        "install_me: elevated={}, silent={}, debug={}, start_after={}, options=\"{}\", path=\"{}\", exe=\"{}\"",
+        is_elevated(None).unwrap_or(false),
+        silent,
+        debug,
+        start_after,
+        options,
+        path,
+        std::env::current_exe().map(|p| p.to_string_lossy().to_string()).unwrap_or_default()
+    );
+    let uninstall_str = get_uninstall(false, false, false);
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
     let mut exe = exe;
@@ -1671,10 +1686,15 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_string();
 
     // potential bug here: if run_cmd cancelled, but config file is changed.
-    if let Some(lic) = get_license() {
-        Config::set_option("key".into(), lic.key);
-        Config::set_option("custom-rendezvous-server".into(), lic.host);
-        Config::set_option("api-server".into(), lic.api);
+    // Only apply a license that is embedded in the executable name itself.
+    // Do not re-apply stale Key/Host/Api values left in the uninstall registry,
+    // otherwise an uninstall + reinstall would resurrect old server configuration.
+    if let Ok(lic) = get_license_from_exe_name() {
+        if !lic.key.is_empty() && !lic.host.is_empty() {
+            Config::set_option("key".into(), lic.key);
+            Config::set_option("custom-rendezvous-server".into(), lic.host);
+            Config::set_option("api-server".into(), lic.api);
+        }
     }
 
     let tray_shortcuts = if config::is_outgoing_only() {
@@ -1739,13 +1759,15 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
             Some(reg_value_desktop_shortcuts),
             Some(reg_value_printer)
         ),
-        sleep = if debug { "timeout 300" } else { "" },
+        sleep = if debug { "ping -n 301 127.0.0.1 >nul" } else { "" },
         dels = if debug { "" } else { &dels },
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
         import_config = get_import_config(&exe),
     );
     run_cmds(cmds, debug, "install")?;
-    run_after_run_cmds(silent);
+    if start_after {
+        run_after_run_cmds(silent);
+    }
     Ok(())
 }
 
@@ -1774,9 +1796,32 @@ fn get_before_uninstall(kill_self: bool) -> String {
         "
     chcp 65001
     sc stop {app_name}
+    for /l %%i in (1,1,30) do (
+        sc query {app_name} | findstr /I \"STOPPED\" >nul
+        if not errorlevel 1 goto svc_stopped
+        sc query {app_name} | findstr /I \"FAILED 1060\" >nul
+        if not errorlevel 1 goto svc_stopped
+        ping -n 2 127.0.0.1 >nul
+    )
+    :svc_stopped
     sc delete {app_name}
+    for /l %%i in (1,1,10) do (
+        sc query {app_name} | findstr /I \"FAILED 1060\" >nul
+        if not errorlevel 1 goto svc_deleted
+        ping -n 2 127.0.0.1 >nul
+    )
+    :svc_deleted
     taskkill /F /IM {broker_exe}
     taskkill /F /IM {app_name}.exe{filter}
+    rem The delete above may race with a still-stopping service; force it once more
+    rem after the process is gone, otherwise sc create later fails with error 1073.
+    sc delete {app_name}
+    for /l %%i in (1,1,10) do (
+        sc query {app_name} | findstr /I \"FAILED 1060\" >nul
+        if not errorlevel 1 goto svc_final
+        ping -n 2 127.0.0.1 >nul
+    )
+    :svc_final
     reg delete HKEY_CLASSES_ROOT\\.{ext} /f
     reg delete HKEY_CLASSES_ROOT\\{ext} /f
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
@@ -1797,7 +1842,7 @@ fn get_before_uninstall(kill_self: bool) -> String {
 /// The `uninstall_printer` parameter determines whether the command to uninstall the remote printer
 /// is included in the generated uninstall script. If `uninstall_printer` is `false`, the printer
 /// related command is omitted from the script.
-fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> String {
+fn get_uninstall(kill_self: bool, uninstall_printer: bool, delete_user_config: bool) -> String {
     let reg_uninstall_string = get_reg("UninstallString");
     if reg_uninstall_string.to_lowercase().contains("msiexec.exe") {
         return reg_uninstall_string;
@@ -1814,9 +1859,88 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> String {
         }
     }
     let (subkey, path, start_menu, _) = get_install_info();
+
+    let (delete_config_cmd, delete_legacy_reg_cmd) = if delete_user_config {
+        let app_name = crate::get_app_name();
+        let user_config_dir = config::Config2::file()
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.to_path_buf())
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let system_config_dir = format!(
+            "C:\\Windows\\System32\\config\\systemprofile\\AppData\\Roaming\\{}",
+            app_name
+        );
+        let local_service_config_dir = format!(
+            "C:\\Windows\\ServiceProfiles\\LocalService\\AppData\\Roaming\\{}",
+            app_name
+        );
+        let network_service_config_dir = format!(
+            "C:\\Windows\\ServiceProfiles\\NetworkService\\AppData\\Roaming\\{}",
+            app_name
+        );
+        let common_config_dirs = format!(
+            "if exist \"%ProgramData%\\{app_name}\" rd /s /q \"%ProgramData%\\{app_name}\" 2>nul
+if exist \"%LOCALAPPDATA%\\{app_name}\" rd /s /q \"%LOCALAPPDATA%\\{app_name}\" 2>nul",
+            app_name = app_name
+        );
+        let config_delete_cmd = if user_config_dir.is_empty() {
+            format!(
+                "{common_config_dirs}
+if exist \"{system_config_dir}\" rd /s /q \"{system_config_dir}\" 2>nul
+if exist \"{local_service_config_dir}\" rd /s /q \"{local_service_config_dir}\" 2>nul
+if exist \"{network_service_config_dir}\" rd /s /q \"{network_service_config_dir}\" 2>nul",
+                common_config_dirs = common_config_dirs,
+                system_config_dir = system_config_dir,
+                local_service_config_dir = local_service_config_dir,
+                network_service_config_dir = network_service_config_dir
+            )
+        } else {
+            format!(
+                "{common_config_dirs}
+if exist \"{user_config_dir}\" rd /s /q \"{user_config_dir}\" 2>nul
+if exist \"{system_config_dir}\" rd /s /q \"{system_config_dir}\" 2>nul
+if exist \"{local_service_config_dir}\" rd /s /q \"{local_service_config_dir}\" 2>nul
+if exist \"{network_service_config_dir}\" rd /s /q \"{network_service_config_dir}\" 2>nul",
+                common_config_dirs = common_config_dirs,
+                user_config_dir = user_config_dir,
+                system_config_dir = system_config_dir,
+                local_service_config_dir = local_service_config_dir,
+                network_service_config_dir = network_service_config_dir
+            )
+        };
+        // Also delete legacy custom-client registry values from both the valid
+        // uninstall subkey and the fallback app-name subkey. Old custom clients
+        // may have stored Key / Host / Api here, which would otherwise be
+        // re-applied during the next install.
+        let app_name_subkey = get_subkey(&app_name, false);
+        let app_name_subkey_wow = get_subkey(&app_name, true);
+        let legacy_reg_delete_cmd = format!(
+            "reg delete {subkey} /v Key /f 2>nul
+reg delete {subkey} /v Host /f 2>nul
+reg delete {subkey} /v Api /f 2>nul
+reg delete \"{app_name_subkey}\" /v Key /f 2>nul
+reg delete \"{app_name_subkey}\" /v Host /f 2>nul
+reg delete \"{app_name_subkey}\" /v Api /f 2>nul
+reg delete \"{app_name_subkey_wow}\" /v Key /f 2>nul
+reg delete \"{app_name_subkey_wow}\" /v Host /f 2>nul
+reg delete \"{app_name_subkey_wow}\" /v Api /f 2>nul",
+            subkey = subkey,
+            app_name_subkey = app_name_subkey,
+            app_name_subkey_wow = app_name_subkey_wow
+        );
+        (config_delete_cmd, legacy_reg_delete_cmd)
+    } else {
+        ("".to_string(), "".to_string())
+    };
+
     format!(
         "
     {before_uninstall}
+    {delete_config_cmd}
+    {delete_legacy_reg_cmd}
     {uninstall_printer_cmd}
     {uninstall_cert_cmd}
     reg delete {subkey} /f
@@ -1827,13 +1951,33 @@ fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> String {
     if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
     ",
         before_uninstall=get_before_uninstall(kill_self),
+        delete_config_cmd=delete_config_cmd,
         uninstall_amyuni_idd=get_uninstall_amyuni_idd(),
         app_name = crate::get_app_name(),
     )
 }
 
+fn confirm_delete_user_config() -> bool {
+    if std::env::var("NO_DIALOG").unwrap_or_default() == "Y" {
+        return false;
+    }
+    let text = "是否同时删除本地配置信息？\n\n选择“是”将删除当前用户和系统服务账户下的 RustDesk 配置（包括 ID、密码、连接记录、日志等）。\n选择“否”将保留配置，仅卸载程序文件。";
+    let caption = format!("卸载 {}", crate::get_app_name());
+    let text_utf16: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    let caption_utf16: Vec<u16> = caption.encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            text_utf16.as_ptr(),
+            caption_utf16.as_ptr(),
+            MB_YESNO | MB_ICONQUESTION | MB_TASKMODAL,
+        ) == IDYES
+    }
+}
+
 pub fn uninstall_me(kill_self: bool) -> ResultType<()> {
-    run_cmds(get_uninstall(kill_self, true), true, "uninstall")
+    let delete_user_config = confirm_delete_user_config();
+    run_cmds(get_uninstall(kill_self, true, delete_user_config), true, "uninstall")
 }
 
 fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
@@ -1853,8 +1997,12 @@ fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathB
     if ext == "bat" {
         let tmp2 = get_undone_file(&tmp)?;
         std::fs::File::create(&tmp2).ok();
+        // Open command echo so that every executed line (and the trailing
+        // errorlevel) is captured in the bat.log written by run_cmds. This
+        // makes install/uninstall failures trivially diagnosable from a single
+        // file instead of guessing at cmd exit codes.
         cmds = format!(
-            "
+            "@echo on
 {cmds}
 if exist \"{path}\" del /f /q \"{path}\"
 ",
@@ -1895,21 +2043,85 @@ fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
     let tmp = write_cmds(cmds, "bat", tip)?;
     let tmp2 = get_undone_file(&tmp)?;
     let tmp_fn = tmp.to_str().unwrap_or("");
-    // https://github.com/rustdesk/rustdesk/issues/6786#issuecomment-1879655410
-    // Specify cmd.exe explicitly to avoid the replacement of cmd commands.
-    let res = runas::Command::new("cmd.exe")
-        .args(&["/C", &tmp_fn])
-        .show(show)
-        .force_prompt(true)
-        .status();
+    // Capture cmd.exe stdout+stderr next to the script so that any failure
+    // can be diagnosed from a single log file.
+    let log_path = tmp.with_extension("bat.log");
+    let log_fn = log_path.to_string_lossy().to_string();
+    // If the current process is already elevated (e.g. install.exe has a
+    // requireAdministrator manifest), run cmd.exe directly. This avoids a
+    // second UAC / security prompt caused by the runas crate.
+    let elevated = is_elevated(None).unwrap_or(false);
+    log::info!(
+        "run_cmds: tip=\"{}\", elevated={}, script=\"{}\", log=\"{}\"",
+        tip,
+        elevated,
+        tmp_fn,
+        log_fn
+    );
+    // Truncate the log file first so a fresh run starts empty.
+    let log_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&log_path)
+        .map_err(|e| {
+            log::error!("run_cmds: failed to open log file {:?}: {}", log_path, e);
+            e
+        })?;
+    // Use Rust's Stdio redirection rather than embedding `> "log" 2>&1` inside
+    // the cmdline. Embedding the redirection inside the cmdline causes a
+    // double-quote parsing issue when `Command::args` joins them on Windows,
+    // which previously left `.bat.log` empty and made install failures
+    // impossible to diagnose.
+    let res = if elevated {
+        let log_for_err = log_file.try_clone()?;
+        std::process::Command::new("cmd.exe")
+            .arg("/C")
+            .arg(&tmp_fn)
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdout(Stdio::from(log_file))
+            .stderr(Stdio::from(log_for_err))
+            .status()
+    } else {
+        // https://github.com/rustdesk/rustdesk/issues/6786#issuecomment-1879655410
+        // Specify cmd.exe explicitly to avoid the replacement of cmd commands.
+        // runas::Command does not expose stdio redirects; fall back to the
+        // legacy `> log 2>&1` cmdline form for the non-elevated branch.
+        drop(log_file);
+        let cmdline = format!(
+            "call \"{}\" > \"{}\" 2>&1",
+            tmp_fn,
+            log_fn.replace('"', "\\\"")
+        );
+        runas::Command::new("cmd.exe")
+            .args(&["/C", &cmdline])
+            .show(show)
+            .force_prompt(true)
+            .status()
+    };
+    let res = res?;
+    log::info!("run_cmds: tip=\"{}\" exited with {:?}", tip, res.code());
     if !show {
-        allow_err!(std::fs::remove_file(tmp));
+        // Only remove the script when it completed fully (its own tail deleted the
+        // .undone marker). On failure keep both the .bat and the .undone marker so
+        // the failure point can be inspected.
+        if !tmp2.exists() {
+            allow_err!(std::fs::remove_file(tmp));
+        }
     }
-    let _ = res?;
     if tmp2.exists() {
-        allow_err!(std::fs::remove_file(tmp2));
-        bail!("{} failed", tip);
+        log::error!(
+            "run_cmds: tip=\"{}\" did not complete (marker exists)",
+            tip
+        );
+        bail!(
+            "{} failed (marker left at {}, log: {})",
+            tip,
+            tmp2.to_string_lossy(),
+            log_fn
+        );
     }
+    log::info!("run_cmds: tip=\"{}\" completed", tip);
     Ok(())
 }
 
@@ -3414,7 +3626,7 @@ taskkill /F /IM {app_name}.exe{filter}
         copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
         rename_exe = rename_exe_cmd(&src_exe, &path)?,
         remove_meta_toml = remove_meta_toml_cmd(is_msi.unwrap_or(true), &path),
-        sleep = if debug { "timeout 300" } else { "" },
+        sleep = if debug { "ping -n 301 127.0.0.1 >nul" } else { "" },
     );
 
     let _restore_session_guard = crate::common::SimpleCallOnReturn {
@@ -3687,17 +3899,63 @@ fn get_import_config(exe: &str) -> String {
     if config::is_outgoing_only() {
         return "".to_string();
     }
-    format!("
+    // sc delete is async — if we re-create immediately the old service can
+    // still be marked-for-deletion and sc create returns 1077 ("service
+    // already marked for deletion"). Wait for the delete to complete, just
+    // like get_before_uninstall does.
+    format!(
+        "
 sc stop {app_name}
 sc delete {app_name}
+for /l %%i in (1,1,15) do (
+    sc query {app_name} | findstr /I \"FAILED 1060\" >nul
+    if not errorlevel 1 goto svc_cfg_deleted
+    ping -n 2 127.0.0.1 >nul
+)
+:svc_cfg_deleted
 sc create {app_name} binpath= \"\\\"{exe}\\\" --import-config \\\"{config_path}\\\"\" start= auto DisplayName= \"{app_name} Service\"
 sc start {app_name}
+ping -n 2 127.0.0.1 >nul
 sc stop {app_name}
 sc delete {app_name}
 ",
     app_name = crate::get_app_name(),
     config_path=Config::file().to_str().unwrap_or(""),
 )
+}
+
+/// Copy bundled default config (config/RustDesk2.toml next to the installed exe)
+/// to the user's config directory if the user does not already have one.
+/// This makes custom deployments work out-of-the-box.
+pub fn apply_default_config_if_needed() {
+    let user_config = Config2::file();
+    if user_config.exists() {
+        return;
+    }
+    let (_, install_path, _, _) = get_install_info();
+    if install_path.is_empty() {
+        return;
+    }
+    let default_config = PathBuf::from(&install_path).join("config").join("RustDesk2.toml");
+    if !default_config.exists() {
+        return;
+    }
+    if let Some(parent) = user_config.parent() {
+        if let Err(e) = fs::create_dir_all(parent) {
+            log::error!("Failed to create config dir {:?}: {}", parent, e);
+            return;
+        }
+    }
+    if let Err(e) = fs::copy(&default_config, &user_config) {
+        log::error!(
+            "Failed to copy default config from {:?} to {:?}: {}",
+            default_config,
+            user_config,
+            e
+        );
+    } else {
+        log::info!("Applied default config from {:?}", default_config);
+    }
 }
 
 fn get_create_service(exe: &str) -> String {
@@ -3711,8 +3969,19 @@ if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{ap
 ", app_name = crate::get_app_name())
     } else {
         format!("
-sc create {app_name} binpath= \"\\\"{exe}\\\" --service\" start= auto DisplayName= \"{app_name} Service\"
-sc start {app_name}
+sc create {app_name} binpath= \"\\\"{exe}\\\" --service\" start= auto DisplayName= \"{app_name} Service\" >nul 2>nul
+ping -n 2 127.0.0.1 >nul
+set /a svc_tries=0
+:svc_try_start
+sc start {app_name} >nul 2>nul
+ping -n 3 127.0.0.1 >nul
+sc query {app_name} | findstr /I \"RUNNING\" >nul
+if not errorlevel 1 goto svc_running
+set /a svc_tries+=1
+if %svc_tries% LSS 3 goto svc_try_start
+:svc_running
+sc query {app_name} | findstr /I \"RUNNING\" >nul
+if errorlevel 1 echo [RUSTDESK-INSTALL-ERROR] Service did not reach RUNNING state
 ",
     app_name = crate::get_app_name())
     }
@@ -3721,16 +3990,25 @@ sc start {app_name}
 fn run_after_run_cmds(silent: bool) {
     let (_, _, _, exe) = get_install_info();
     if !silent {
-        log::debug!("Spawn new window");
-        allow_err!(std::process::Command::new("cmd")
-            .args(&["/c", "timeout", "/t", "2", "&", &format!("{exe}")])
-            .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
-            .spawn());
+        // Spawn the main window directly via CreateProcessW (parameterized), so that
+        // paths containing spaces like "C:\Program Files\RustDesk\rustdesk.exe" work.
+        // The previous `cmd /c ping ... & {exe}` approach dropped quoting and silently
+        // failed to open the main window after install.
+        log::debug!("Spawn new window: {}", exe);
+        match std::process::Command::new(&exe).spawn() {
+            Ok(_) => {}
+            Err(e) => log::error!("Failed to spawn main window {}: {}", exe, e),
+        }
     }
     if Config::get_option("stop-service") != "Y" {
-        allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
+        log::debug!("Spawn tray: {} --tray", exe);
+        match std::process::Command::new(&exe).arg("--tray").spawn() {
+            Ok(_) => {}
+            Err(e) => log::error!("Failed to spawn tray {}: {}", exe, e),
+        }
     }
-    std::thread::sleep(std::time::Duration::from_millis(300));
+    // Give the spawned processes a moment to take over before this installer exits.
+    std::thread::sleep(std::time::Duration::from_millis(500));
 }
 
 #[inline]

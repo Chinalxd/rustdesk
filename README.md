@@ -19,6 +19,24 @@ Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitt
 
 Yet another remote desktop solution, written in Rust. Works out of the box with no configuration required. You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/server), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
 
+> [!Note]
+> **This is a customized fork (v1.4.11) with extra enhancements for enterprise/internal deployment on Windows.** Based on the upstream open-source description above, the following optimizations have been added:
+
+## ✨ 定制增强功能 (Custom Enhancements)
+
+| # | 功能 | 说明 |
+|---|------|------|
+| 1 | **跨会话文件复制粘贴** | 控制端 A 会话中复制的文件，可在控制端 B 会话中直接粘贴（纯 Rust 层 cliprdr 消息中继，无需被控端参与），跨被控设备批量传文件更高效 |
+| 2 | **远程文件复制粘贴** | 被控端 ↔ 控制端之间可直接复制/粘贴文件（sessionStart 事件流，剪贴板通道自动协商） |
+| 3 | **剪贴板自动恢复** | 每次新建连接自动重建剪贴板上下文（`make_sure_enabled`），检测到 stopped 自动 reset/recreate，长时间会话不再丢剪贴板 |
+| 4 | **安装后自动启动** | 安装/覆盖安装完成后自动弹出主窗口 + 托盘图标，服务自动创建并设为自启动（Automatic + RUNNING），已配置网络 ID/中继服务器时自动连接 |
+| 5 | **卸载彻底清除配置** | 卸载时可选择一并删除用户及系统服务账户下的全部配置（ID、密码、连接记录、日志等），做到干净卸载不留残留（附带 `cleanup_rustdesk_config.ps1` 手动清理脚本） |
+| 6 | **CM 窗口完全隐藏** | 连接管理窗口默认不弹出、不抢焦点，每 30 秒强制防弹窗加固，适合无人值守部署 |
+| 7 | **静默提权安装** | 安装包 manifest `requireAdministrator`，支持 `--silent-install` 一键静默安装；安装器支持自选安装路径 |
+| 8 | **安装失败可诊断** | 安装 bat 逐行执行日志写入 `%TEMP%\RustDesk_install.bat.log`（Stdio 物理重定向），失败弹窗直接提示日志路径，现场可追溯 |
+| 9 | **服务操作竞态修复** | `sc stop/delete/create` 增加等待循环，消除 1073/1077 竞态导致的安装失败 |
+
+
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
 RustDesk welcomes contribution from everyone. See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for help getting started.

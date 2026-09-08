@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.4.9"
+version = "1.4.11"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -208,6 +208,11 @@ exclude = ["vdi/host", "examples/custom_plugin"]
 # This allows building and running on systems without libxdo installed (e.g., Wayland-only)
 [patch.crates-io]
 libxdo-sys = { path = "libs/libxdo-sys-stub" }
+
+# Stub out the webm native submodule so builds don't require chromium.googlesource.com.
+# Recording to WebM is disabled by this stub.
+[patch."https://github.com/rustdesk-org/rust-webm"]
+webm = { path = "libs/webm-stub" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."

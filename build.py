@@ -448,6 +448,11 @@ def build_flutter_windows(version, features, skip_portable_pack):
     os.chdir('..')
     shutil.copy2('target/release/deps/dylib_virtual_display.dll',
                  flutter_build_dir_2)
+    # Bundle default config for out-of-the-box custom deployment.
+    if os.path.exists('res/config/RustDesk2.toml'):
+        os.makedirs(f'{flutter_build_dir_2}/config', exist_ok=True)
+        shutil.copy2('res/config/RustDesk2.toml',
+                     f'{flutter_build_dir_2}/config/RustDesk2.toml')
     if skip_portable_pack:
         return
     os.chdir('libs/portable')
