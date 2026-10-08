@@ -30,9 +30,6 @@ import 'mobile/pages/server_page.dart';
 import 'mobile/widgets/deploy_dialog.dart';
 import 'models/platform_model.dart';
 
-import 'package:flutter_hbb/plugin/handlers.dart'
-    if (dart.library.html) 'package:flutter_hbb/web/plugin/handlers.dart';
-
 /// Basic window and launch properties.
 int? kWindowId;
 WindowType? kWindowType;
@@ -141,8 +138,6 @@ void runMainApp(bool startService) async {
   await bind.mainCheckConnectStatus();
   if (startService) {
     gFFI.serverModel.startService();
-    bind.pluginSyncUi(syncTo: kAppTypeMain);
-    bind.pluginListReload();
   }
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
@@ -294,6 +289,7 @@ void runConnectionManagerScreen() async {
     const DesktopServerPage(),
     MyTheme.currentThemeMode(),
   );
+  // [Custom] The connection manager window is always hidden in this build.
   const hide = true;
   gFFI.serverModel.hideCm = hide;
   if (hide) {
@@ -309,8 +305,8 @@ void runConnectionManagerScreen() async {
 bool _isCmReadyToShow = false;
 
 showCmWindow({bool isStartup = false}) async {
-  // Always honor the hide-CM setting. Any code path that tries to show the
-  // connection manager while the user wants it hidden must bail out.
+  // [Custom] Always honor the hide-CM setting. Any code path that tries to
+  // show the connection manager while it should stay hidden must bail out.
   if (gFFI.serverModel.hideCm) {
     await hideCmWindow();
     return;
@@ -352,9 +348,9 @@ hideCmWindow({bool isStartup = false}) async {
     await windowManager.hide();
     _isCmReadyToShow = true;
   } else if (_isCmReadyToShow) {
-    // Aggressively hide the window. Long-running processes can lose window
-    // state after display events (sleep/wake, DPI changes, etc.), so we force
-    // opacity to 0, minimize, and hide regardless of the cached opacity value.
+    // [Custom] Aggressively hide the window. Long-running processes can lose
+    // window state after display events (sleep/wake, DPI changes, etc.), so we
+    // force opacity to 0, minimize, and hide regardless of the cached value.
     try {
       await windowManager.setOpacity(0);
       bind.mainHideDock();
@@ -581,12 +577,6 @@ _registerEventHandler() {
       reloadAllWindows();
     });
   }
-  // Register native handlers.
-  if (isDesktop) {
-    platformFFI.registerEventHandler('native_ui', 'native_ui', (evt) async {
-      NativeUiHandler.instance.onEvent(evt);
-    });
-  }
   if (isAndroid) {
     platformFFI.registerEventHandler(
         'android_needs_deploy', 'android_needs_deploy', (_) async {
@@ -599,7 +589,8 @@ _registerEventHandler() {
 
 Widget keyListenerBuilder(BuildContext context, Widget? child) {
   return RawKeyboardListener(
-    focusNode: FocusNode(),
+    // `skipTraversal: isWeb` is to fix "Bad state: RenderBox was not laid out: minified:aeL#c19e4"
+    focusNode: FocusNode(skipTraversal: isWeb),
     child: child ?? Container(),
     onKey: (RawKeyEvent event) {
       if (event.logicalKey == LogicalKeyboardKey.shiftLeft) {

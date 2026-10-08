@@ -2,44 +2,18 @@
   <img src="res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
-  <a href="#定制增强功能-custom-enhancements">定制增强</a> •
   <a href="#file-structure">Structure</a> •
-  <a href="#snapshot">Snapshot</a><br>
+  <a href="#screenshots">Screenshots</a><br>
   [<a href="docs/README-UA.md">Українська</a>] | [<a href="docs/README-CS.md">česky</a>] | [<a href="docs/README-ZH.md">中文</a>] | [<a href="docs/README-HU.md">Magyar</a>] | [<a href="docs/README-ES.md">Español</a>] | [<a href="docs/README-FA.md">فارسی</a>] | [<a href="docs/README-FR.md">Français</a>] | [<a href="docs/README-DE.md">Deutsch</a>] | [<a href="docs/README-PL.md">Polski</a>] | [<a href="docs/README-ID.md">Indonesian</a>] | [<a href="docs/README-FI.md">Suomi</a>] | [<a href="docs/README-ML.md">മലയാളം</a>] | [<a href="docs/README-JP.md">日本語</a>] | [<a href="docs/README-NL.md">Nederlands</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Русский</a>] | [<a href="docs/README-PTBR.md">Português (Brasil)</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">한국어</a>] | [<a href="docs/README-AR.md">العربي</a>] | [<a href="docs/README-VN.md">Tiếng Việt</a>] | [<a href="docs/README-DA.md">Dansk</a>] | [<a href="docs/README-GR.md">Ελληνικά</a>] | [<a href="docs/README-TR.md">Türkçe</a>] | [<a href="docs/README-NO.md">Norsk</a>] | [<a href="docs/README-RO.md">Română</a>]<br>
   <b>We need your help to translate this README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> and <a href="https://github.com/rustdesk/doc.rustdesk.com">RustDesk Doc</a> to your native language</b>
 </p>
-
----
-
-## 🚀 定制增强功能 (Custom Enhancements)
-
-> [!IMPORTANT]
-> **本仓库是 RustDesk 官方版本的定制增强分支（v1.4.11）。**
-> 在完整保留上游开源能力的基础上，针对企业内部 Windows 批量部署与运维场景做了以下增强。
-> 下表为本分支**独有**功能，官方原版不具备。
->
-> 🔹 跨会话复制文件　🔹 安装后自动启动服务并连接　🔹 卸载可彻底清除配置　🔹 CM 窗口完全隐藏
-
-| # | 功能 | 说明 |
-|---|------|------|
-| 1 | **跨会话文件复制粘贴** | 控制端 A 会话中复制的文件，可在控制端 B 会话中直接粘贴（纯 Rust 层 cliprdr 消息中继，无需被控端参与），跨被控设备批量传文件更高效 |
-| 2 | **远程文件复制粘贴** | 被控端 ↔ 控制端之间可直接复制/粘贴文件（sessionStart 事件流，剪贴板通道自动协商） |
-| 3 | **剪贴板自动恢复** | 每次新建连接自动重建剪贴板上下文（`make_sure_enabled`），检测到 stopped 自动 reset/recreate，长时间会话不再丢剪贴板 |
-| 4 | **安装后自动启动** | 安装/覆盖安装完成后自动弹出主窗口 + 托盘图标，服务自动创建并设为自启动（Automatic + RUNNING），已配置 ID/中继服务器时自动连接 |
-| 5 | **卸载彻底清除配置** | 卸载时可选择一并删除用户及系统服务账户下的全部配置（ID、密码、连接记录、日志等），干净卸载不留残留（附带 `cleanup_rustdesk_config.ps1` 手动清理脚本） |
-| 6 | **CM 窗口完全隐藏** | 连接管理窗口默认不弹出、不抢焦点，每 30 秒强制防弹窗加固，适合无人值守部署 |
-| 7 | **静默提权安装** | 安装包 manifest `requireAdministrator`，支持 `--silent-install` 一键静默安装；安装器支持自选安装路径 |
-| 8 | **安装失败可诊断** | 安装 bat 逐行执行日志写入 `%TEMP%\RustDesk_install.bat.log`（Stdio 物理重定向），失败弹窗直接提示日志路径，现场可追溯 |
-| 9 | **服务操作竞态修复** | `sc stop/delete/create` 增加等待循环，消除 1073/1077 竞态导致的安装失败 |
-
----
-
-### 以下为 RustDesk 官方开源说明
 
 > [!Caution]
 > **Misuse Disclaimer:** <br>
 > The developers of RustDesk do not condone or support any unethical or illegal use of this software. Misuse, such as unauthorized access, control or invasion of privacy, is strictly against our guidelines. The authors are not responsible for any misuse of the application.
 
+
+Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk) | [YouTube](https://www.youtube.com/@rustdesk)
 
 [![RustDesk Server Pro](https://img.shields.io/badge/RustDesk%20Server%20Pro-Advanced%20Features-blue)](https://rustdesk.com/pricing.html)
 
@@ -64,7 +38,7 @@ RustDesk welcomes contribution from everyone. See [CONTRIBUTING.md](docs/CONTRIB
 
 ## Dependencies
 
-Desktop versions use Flutter or Sciter (deprecated) for GUI, this tutorial is for Sciter only, since it is easier and more friendly to start. Check out our [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) for building Flutter version.
+Desktop versions use Flutter or Sciter (deprecated) for GUI. This tutorial is for Sciter only, since it is easier and more friendly to start. Check out our [CI](https://github.com/rustdesk/rustdesk/blob/master/.github/workflows/flutter-build.yml) for building the Flutter version.
 
 Please download Sciter dynamic library yourself.
 
@@ -92,19 +66,19 @@ Please download Sciter dynamic library yourself.
 ```sh
 sudo apt install -y zip g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev \
         libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake make \
-        libclang-dev ninja-build libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libpam0g-dev
+        libclang-dev ninja-build libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 ```
 
 ### openSUSE Tumbleweed
 
 ```sh
-sudo zypper install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libXfixes-devel cmake alsa-lib-devel gstreamer-devel gstreamer-plugins-base-devel xdotool-devel pam-devel
+sudo zypper install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libXfixes-devel cmake alsa-lib-devel gstreamer-devel gstreamer-plugins-base-devel xdotool-devel
 ```
 
 ### Fedora 28 (CentOS 8)
 
 ```sh
-sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel gstreamer1-devel gstreamer1-plugins-base-devel pam-devel
+sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel gstreamer1-devel gstreamer1-plugins-base-devel
 ```
 
 ### Arch (Manjaro)
@@ -184,7 +158,8 @@ Please ensure that you run these commands from the root of the RustDesk reposito
 
 ## File Structure
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions for file transfer, and some other utility functions
+- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, and some other utility functions shared with the server
+- **[libs/base](https://github.com/rustdesk/rustdesk/tree/master/libs/base)**: protobuf, fs functions for file transfer, keyboard and platform code used only by this app
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: screen capture
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platform specific keyboard/mouse control
 - **[libs/clipboard](https://github.com/rustdesk/rustdesk/tree/master/libs/clipboard)**: file copy and paste implementation for Windows, Linux, macOS.
@@ -194,7 +169,6 @@ Please ensure that you run these commands from the root of the RustDesk reposito
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Communicate with [rustdesk-server](https://github.com/rustdesk/rustdesk-server), wait for remote direct (TCP hole punching) or relayed connection
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter code for desktop and mobile
-- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/v1/js)**: JavaScript for Flutter web client
 
 ## Screenshots
 

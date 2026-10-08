@@ -1,0 +1,85 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter --version
+
+## exception
+
+ProcessPackageException: ProcessException: 所有的管道范例都在使用中。
+
+  Command: cmd.exe /c ver
+
+```
+#0      LocalProcessManager.runSync (package:process/src/interface/local_process_manager.dart:118:7)
+#1      ErrorHandlingProcessManager.runSync.<anonymous closure> (package:flutter_tools/src/base/error_handling_io.dart:678:26)
+#2      _runSync (package:flutter_tools/src/base/error_handling_io.dart:550:14)
+#3      ErrorHandlingProcessManager.runSync (package:flutter_tools/src/base/error_handling_io.dart:676:12)
+#4      _WindowsUtils.name (package:flutter_tools/src/base/os.dart:579:52)
+#5      _DefaultUsage.initialize (package:flutter_tools/src/reporting/usage.dart:186:93)
+#6      new Usage (package:flutter_tools/src/reporting/usage.dart:20:23)
+#7      runInContext.<anonymous closure> (package:flutter_tools/src/context_runner.dart:336:17)
+#8      AppContext._generateIfNecessary.<anonymous closure> (package:flutter_tools/src/base/context.dart:108:42)
+#9      _LinkedHashMapMixin.putIfAbsent (dart:_compact_hash:673:23)
+#10     AppContext._generateIfNecessary (package:flutter_tools/src/base/context.dart:95:20)
+#11     AppContext.get (package:flutter_tools/src/base/context.dart:125:32)
+#12     AppContext.get (package:flutter_tools/src/base/context.dart:123:23)
+#13     flutterUsage (package:flutter_tools/src/globals.dart:73:35)
+#14     FlutterCommandRunner.runCommand.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:462:19)
+<asynchronous suspension>
+#15     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#16     FlutterCommandRunner.runCommand (package:flutter_tools/src/runner/flutter_command_runner.dart:431:5)
+<asynchronous suspension>
+#17     run.<anonymous closure>.<anonymous closure> (package:flutter_tools/runner.dart:98:11)
+<asynchronous suspension>
+#18     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#19     main (package:flutter_tools/executable.dart:99:3)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+encountered exception: ProcessException: 管道正在被关闭。
+
+  Command: C:\Windows\system32\where.EXE java
+
+#0      LocalProcessManager.runSync (package:process/src/interface/local_process_manager.dart:118:7)
+#1      ErrorHandlingProcessManager.runSync.<anonymous closure> (package:flutter_tools/src/base/error_handling_io.dart:678:26)
+#2      _runSync (package:flutter_tools/src/base/error_handling_io.dart:550:14)
+#3      ErrorHandlingProcessManager.runSync (package:flutter_tools/src/base/error_handling_io.dart:676:12)
+#4      _WindowsUtils._which (package:flutter_tools/src/base/os.dart:509:50)
+#5      OperatingSystemUtils.which (package:flutter_tools/src/base/os.dart:91:31)
+#6      _findJavaBinary (package:flutter_tools/src/android/java.dart:262:31)
+#7      Java.find (package:flutter_tools/src/android/java.dart:91:28)
+#8      runInContext.<anonymous closure> (package:flutter_tools/src/context_runner.dart:261:22)
+#9      AppContext._generateIfNecessary.<anonymous closure> (package:flutter_tools/src/base/context.dart:108:42)
+#10     _LinkedHashMapMixin.putIfAbsent (dart:_compact_hash:673:23)
+#11     AppContext._generateIfNecessary (package:flutter_tools/src/base/context.dart:95:20)
+#12     AppContext.get (package:flutter_tools/src/base/context.dart:125:32)
+#13     java (package:flutter_tools/src/globals.dart:298:27)
+#14     runInContext.<anonymous closure> (package:flutter_tools/src/context_runner.dart:119:27)
+#15     AppContext._generateIfNecessary.<anonymous closure> (package:flutter_tools/src/base/context.dart:108:42)
+#16     _LinkedHashMapMixin.putIfAbsent (dart:_compact_hash:673:23)
+#17     AppContext._generateIfNecessary (package:flutter_tools/src/base/context.dart:95:20)
+#18     AppContext.get (package:flutter_tools/src/base/context.dart:125:32)
+#19     androidValidator (package:flutter_tools/src/android/android_workflow.dart:28:51)
+#20     _DefaultDoctorValidatorsProvider.validators (package:flutter_tools/src/doctor.dart:155:44)
+#21     Doctor.validators (package:flutter_tools/src/doctor.dart:221:47)
+#22     Doctor.startValidatorTasks (package:flutter_tools/src/doctor.dart:227:45)
+#23     DoctorText._validatorTasks (package:flutter_tools/src/doctor.dart:827:60)
+#24     DoctorText._validatorTasks (package:flutter_tools/src/doctor.dart)
+#25     DoctorText._runDiagnosis (package:flutter_tools/src/doctor.dart:832:32)
+#26     DoctorText.text (package:flutter_tools/src/doctor.dart:823:36)
+#27     DoctorText.text (package:flutter_tools/src/doctor.dart)
+#28     _createLocalCrashReport (package:flutter_tools/runner.dart:274:51)
+#29     _handleToolError (package:flutter_tools/runner.dart:235:31)
+<asynchronous suspension>
+#30     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#31     main (package:flutter_tools/executable.dart:99:3)
+<asynchronous suspension>
+```

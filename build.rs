@@ -43,6 +43,15 @@ fn build_manifest() {
     }
 }
 
+// bionic only exports getifaddrs()/freeifaddrs() from API 24, while the jniLibs
+// are built against the API 21 sysroot (flutter/ndk_*.sh). webrtc-util calls
+// them, so without this the android link fails on undefined symbols.
+fn build_android_ifaddrs() {
+    let file = "src/platform/android_ifaddrs.c";
+    cc::Build::new().file(file).compile("android_ifaddrs");
+    println!("cargo:rerun-if-changed={}", file);
+}
+
 fn install_android_deps() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os != "android" {
@@ -72,13 +81,37 @@ fn install_android_deps() {
         path.join("lib").to_str().unwrap()
     );
     println!("cargo:rustc-link-lib=ndk_compat");
-    println!("cargo:rustc-link-lib=oboe");
     println!("cargo:rustc-link-lib=c++");
     println!("cargo:rustc-link-lib=OpenSLES");
 }
 
+fn set_display_version(display: &str) {
+    let path = std::path::Path::new("src").join("version.rs");
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let mut out = String::with_capacity(content.len());
+    let mut changed = false;
+    for line in content.lines() {
+        if line.starts_with("pub const VERSION: &str = ") {
+            out.push_str(&format!(r#"pub const VERSION: &str = "{}";"#, display));
+            changed = true;
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    if changed {
+        let _ = std::fs::write(&path, out);
+    }
+}
+
 fn main() {
     hbb_common::gen_version();
+    // Cargo/semver does not allow a 4-segment version (1.5.0.1), so the
+    // manifest keeps 1.5.0 while the user-visible version constant is
+    // rewritten here to mark this customized build.
+    set_display_version("1.5.0.1");
     install_android_deps();
     #[cfg(all(windows, feature = "inline"))]
     build_manifest();
@@ -89,6 +122,9 @@ fn main() {
         #[cfg(target_os = "macos")]
         build_mac();
         println!("cargo:rustc-link-lib=framework=ApplicationServices");
+    }
+    if target_os == "android" {
+        build_android_ifaddrs();
     }
     println!("cargo:rerun-if-changed=build.rs");
 }
