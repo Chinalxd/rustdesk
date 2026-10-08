@@ -8,9 +8,12 @@ on:
       - '[0-9]+.[0-9]+.[0-9]+'
       - 'v[0-9]+.[0-9]+.[0-9]+-[0-9]+'
       - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'
-      # [Custom] four-segment tags for customized builds (e.g. v1.5.0.1)
-      - 'v[0-9]+.[0-9]+.[0-9]+.[0-9]+'
-      - '[0-9]+.[0-9]+.[0-9]+.[0-9]+'
+      # [Custom] Star-based variants: GitHub's tag filter treats "+" literally,
+      # so the upstream patterns above never match a real tag. These do.
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+      - '[0-9]*.[0-9]*.[0-9]*'
+      - 'v[0-9]*.[0-9]*.[0-9]*.[0-9]*'
+      - '[0-9]*.[0-9]*.[0-9]*.[0-9]*'
 
 jobs:
   run-flutter-tag-build:
