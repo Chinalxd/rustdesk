@@ -69,3 +69,5 @@ flutter/.flutter_tool_state
 # portable build artifacts (generated at build time)
 libs/portable/app_metadata.toml
 libs/portable/manifest.xml
+# local checkout of rust-webm (fetched by build_rustdesk_installer.sh)
+libs/rust-webm/

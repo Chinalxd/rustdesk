@@ -85,33 +85,8 @@ fn install_android_deps() {
     println!("cargo:rustc-link-lib=OpenSLES");
 }
 
-fn set_display_version(display: &str) {
-    let path = std::path::Path::new("src").join("version.rs");
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return;
-    };
-    let mut out = String::with_capacity(content.len());
-    let mut changed = false;
-    for line in content.lines() {
-        if line.starts_with("pub const VERSION: &str = ") {
-            out.push_str(&format!(r#"pub const VERSION: &str = "{}";"#, display));
-            changed = true;
-        } else {
-            out.push_str(line);
-        }
-        out.push('\n');
-    }
-    if changed {
-        let _ = std::fs::write(&path, out);
-    }
-}
-
 fn main() {
     hbb_common::gen_version();
-    // Cargo/semver does not allow a 4-segment version (1.5.0.1), so the
-    // manifest keeps 1.5.0 while the user-visible version constant is
-    // rewritten here to mark this customized build.
-    set_display_version("1.5.0.1");
     install_android_deps();
     #[cfg(all(windows, feature = "inline"))]
     build_manifest();

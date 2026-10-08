@@ -253,10 +253,13 @@ webrtc = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d30e6e
 webrtc-util = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63" }
 webrtc-sctp = { git = "https://github.com/rustdesk-org/webrtc", rev = "49c89bd8d30e6e62e4c1a96cee38fdc11f79ef63" }
 
-# Stub out the webm native submodule so builds don't require chromium.googlesource.com.
-# Recording to WebM is disabled by this stub.
+
+# Local checkout of the real rust-webm crate. Its libwebm submodule normally points at
+# chromium.googlesource.com, which is unreachable from this machine; the prepare script
+# (build_rustdesk_installer.sh) fills src/sys/libwebm from the GitHub mirror instead.
+# This keeps the upstream WebM session-recording feature intact.
 [patch."https://github.com/rustdesk-org/rust-webm"]
-webm = { path = "libs/webm-stub" }
+webm = { path = "libs/rust-webm" }
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved."
