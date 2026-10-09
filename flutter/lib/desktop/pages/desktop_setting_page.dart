@@ -2552,22 +2552,46 @@ class _AboutState extends State<_About> {
               SelectionArea(
                   child: Text('${translate('ID')}: $myId')
                       .marginSymmetric(vertical: 4.0)),
+              // [Custom] maintainer info block, shown right below the ID line.
+              SelectionArea(
+                  child: Text(
+                '定制说明:\n'
+                '版本：1.5.0.1  本软件基于 RustDesk (AGPL-3.0) 开源版本二次开发。\n'
+                '作者：Chinalxd\n'
+                '新增功能：\n'
+                '- CM 窗口隐藏，避免被误关闭断开连接\n'
+                '- 自动安装并启动服务，便于远程升级后重连',
+              ).marginSymmetric(vertical: 4.0)),
               InkWell(
                   onTap: () {
-                    launchUrlString('https://rustdesk.com/privacy.html');
+                    launchUrlString('https://gitee.com/chinalxd/rustdesk');
                   },
                   child: Text(
                     translate('Privacy Statement'),
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
-              InkWell(
-                  onTap: () {
-                    launchUrlString('https://rustdesk.com');
-                  },
-                  child: Text(
-                    translate('Website'),
-                    style: linkStyle,
-                  ).marginSymmetric(vertical: 4.0)),
+              // [Custom] personal site + Gitee, replaces the upstream single
+              // rustdesk.com website link.
+              Row(children: [
+                InkWell(
+                    onTap: () {
+                      launchUrlString(
+                          'https://vigilserve.com/work-rustdesk.html');
+                    },
+                    child: Text(
+                      '个人网站',
+                      style: linkStyle,
+                    )),
+                const Text(' | '),
+                InkWell(
+                    onTap: () {
+                      launchUrlString('https://gitee.com/chinalxd/rustdesk');
+                    },
+                    child: Text(
+                      'Gitee',
+                      style: linkStyle,
+                    )),
+              ]).marginSymmetric(vertical: 4.0),
               Container(
                 decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
                 padding:
@@ -2580,7 +2604,9 @@ class _AboutState extends State<_About> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n$license',
+                            'Copyright © ${DateTime.now().toString().substring(0, 4)} Purslane Tech Pte. Ltd.\n'
+                                    'Copyright © ${DateTime.now().toString().substring(0, 4)} Chinalxd. All rights reserved.\n'
+                                    '$license',
                             style: const TextStyle(color: Colors.white),
                           ),
                           Text(
