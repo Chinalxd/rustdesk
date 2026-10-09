@@ -1,15 +1,16 @@
 > [!IMPORTANT]
 > **定制说明 / Custom Build Notice**
 >
-> 本仓库是 [RustDesk](https://github.com/rustdesk/rustdesk)（AGPL-3.0）开源版本的二次开发构建，保留官方全部功能（如会话录制）。
+> 本仓库是 [RustDesk](https://github.com/rustdesk/rustdesk)（AGPL-3.0）开源版本的二次开发构建，保留官方全部功能。
 >
 > - **版本**：1.5.0.1
 > - **作者**：Chinalxd
 > - **新增功能**
 >   - CM 窗口隐藏，避免被误关闭断开连接
 >   - 自动安装并启动服务，便于远程升级后重连
-> - **隐私声明**：<https://gitee.com/chinalxd/rustdesk>
-> - **个人网站**：<https://vigilserve.com/work-rustdesk.html> ｜ **Gitee**：<https://gitee.com/chinalxd/rustdesk>
+
+> - **个人网站**：<https://vigilserve.com/work-rustdesk.html> 
+
 > - Copyright © 2026 Purslane Tech Pte. Ltd.
 > - Copyright © 2026 Chinalxd. All rights reserved.
 
